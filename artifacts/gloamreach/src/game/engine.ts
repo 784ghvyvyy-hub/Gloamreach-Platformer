@@ -1,8 +1,11 @@
 export const WORLD_WIDTH = 2400;
 export const WORLD_HEIGHT = 960;
 export const FLOOR_Y = 540;
+export const VILLAGE_WIDTH = 1600;
+export const EVA_X = 590;
 
 export type GamePhase = "ready" | "playing" | "won" | "fallen";
+export type GameLocation = "village" | "sanctuary";
 
 export interface Platform {
   x: number;
@@ -56,11 +59,14 @@ export interface EnemyState {
 
 export interface GameState {
   phase: GamePhase;
+  location: GameLocation;
   player: PlayerState;
   enemy: EnemyState;
   cameraX: number;
   cameraY: number;
   elapsed: number;
+  dialogueLine: number;
+  hasSpokenToEva: boolean;
 }
 
 export interface GameInput {
@@ -70,6 +76,10 @@ export interface GameInput {
   attackPressed: boolean;
 }
 
+const VILLAGE_PLATFORMS: Platform[] = [
+  { x: 0, y: FLOOR_Y, width: VILLAGE_WIDTH, height: WORLD_HEIGHT - FLOOR_Y },
+];
+
 const GRAVITY = 1480;
 const RUN_SPEED = 218;
 const RUN_ACCELERATION = 1540;
@@ -78,6 +88,7 @@ const JUMP_SPEED = 535;
 export function createGameState(phase: GamePhase = "ready"): GameState {
   return {
     phase,
+    location: "village",
     player: {
       x: 122,
       y: FLOOR_Y - 54,
@@ -109,6 +120,8 @@ export function createGameState(phase: GamePhase = "ready"): GameState {
     cameraX: 0,
     cameraY: 0,
     elapsed: 0,
+    dialogueLine: -1,
+    hasSpokenToEva: false,
   };
 }
 
@@ -118,6 +131,16 @@ export function startGame(state: GameState): void {
 
 export function resetGame(): GameState {
   return createGameState("playing");
+}
+
+export function advanceVillageDialogue(state: GameState): void {
+  if (state.location !== "village" || state.dialogueLine < 0) return;
+  if (state.dialogueLine < 2) {
+    state.dialogueLine += 1;
+    return;
+  }
+  state.dialogueLine = -1;
+  state.hasSpokenToEva = true;
 }
 
 function approach(value: number, target: number, amount: number): number {
@@ -169,7 +192,8 @@ function updatePlayer(state: GameState, input: GameInput, dt: number): void {
   player.y += player.vy * dt;
   player.grounded = false;
 
-  for (const platform of PLATFORMS) {
+  const platforms = state.location === "village" ? VILLAGE_PLATFORMS : PLATFORMS;
+  for (const platform of platforms) {
     const newBottom = player.y + player.height;
     const overlapsX =
       player.x + player.width > platform.x &&
@@ -188,7 +212,8 @@ function updatePlayer(state: GameState, input: GameInput, dt: number): void {
     }
   }
 
-  player.x = Math.max(16, Math.min(WORLD_WIDTH - player.width - 16, player.x));
+  const worldWidth = state.location === "village" ? VILLAGE_WIDTH : WORLD_WIDTH;
+  player.x = Math.max(16, Math.min(worldWidth - player.width - 16, player.x));
   player.attackTimer = Math.max(0, player.attackTimer - dt);
   player.invulnerable = Math.max(0, player.invulnerable - dt);
   player.hurtTimer = Math.max(0, player.hurtTimer - dt);
@@ -288,18 +313,46 @@ export function updateGame(
   viewWidth: number,
   viewHeight: number,
 ): void {
-  if (state.phase !== "playing") return;
+  if (state.phase !== "playing" || state.dialogueLine >= 0) return;
   const dt = Math.min(Math.max(deltaSeconds, 0), 1 / 30);
   state.elapsed += dt;
 
   updatePlayer(state, input, dt);
-  updateEnemy(state, dt);
-  resolvePlayerAttack(state);
+  if (state.location === "village") {
+    const playerCenter = state.player.x + state.player.width / 2;
+    const nearEva = Math.abs(playerCenter - EVA_X) <= 94 &&
+      Math.abs(state.player.y + state.player.height - FLOOR_Y) <= 72;
+    if (!state.hasSpokenToEva && nearEva) state.dialogueLine = 0;
 
-  if (state.player.hp <= 0) state.phase = "fallen";
-  else if (state.enemy.hp <= 0) state.phase = "won";
+    if (
+      state.hasSpokenToEva &&
+      state.player.x >= VILLAGE_WIDTH - state.player.width - 72
+    ) {
+      const fresh = createGameState("playing");
+      state.location = "sanctuary";
+      state.player.x = fresh.player.x;
+      state.player.y = fresh.player.y;
+      state.player.vx = 0;
+      state.player.vy = 0;
+      state.player.grounded = true;
+      state.player.facing = 1;
+      state.player.attackTimer = 0;
+      state.player.attackDidHit = false;
+      state.player.invulnerable = 0;
+      state.player.hurtTimer = 0;
+      state.enemy = fresh.enemy;
+      state.cameraX = 0;
+      state.cameraY = 0;
+    }
+  } else {
+    updateEnemy(state, dt);
+    resolvePlayerAttack(state);
+    if (state.player.hp <= 0) state.phase = "fallen";
+    else if (state.enemy.hp <= 0) state.phase = "won";
+  }
 
-  const maxCameraX = Math.max(0, WORLD_WIDTH - viewWidth);
+  const worldWidth = state.location === "village" ? VILLAGE_WIDTH : WORLD_WIDTH;
+  const maxCameraX = Math.max(0, worldWidth - viewWidth);
   const maxCameraY = Math.max(0, WORLD_HEIGHT - viewHeight);
   const targetX = Math.max(
     0,
@@ -308,13 +361,15 @@ export function updateGame(
       state.player.x + state.player.width / 2 - viewWidth * 0.42,
     ),
   );
-  const targetY = Math.max(
-    0,
-    Math.min(
-      maxCameraY,
-      state.player.y + state.player.height / 2 - viewHeight * 0.55,
-    ),
-  );
+  const targetY = state.location === "village"
+    ? 0
+    : Math.max(
+      0,
+      Math.min(
+        maxCameraY,
+        state.player.y + state.player.height / 2 - viewHeight * 0.55,
+      ),
+    );
   const cameraEase = 1 - Math.exp(-5.2 * dt);
   state.cameraX += (targetX - state.cameraX) * cameraEase;
   state.cameraY += (targetY - state.cameraY) * cameraEase;

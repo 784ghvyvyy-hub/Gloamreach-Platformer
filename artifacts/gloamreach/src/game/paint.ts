@@ -5,6 +5,7 @@ import {
   WORLD_WIDTH,
   type GameState,
 } from "./engine";
+import { drawVillageWorld } from "./village";
 
 const MUSHROOMS = [
   [84, 514, 1], [259, 509, 0.7], [375, 431, 0.8], [525, 515, 0.8],
@@ -711,6 +712,11 @@ export function drawPaintedWorld(
   height: number,
   scale: number,
 ) {
+  if (state.location === "village") {
+    drawVillageWorld(ctx, state, width, height, scale, drawHero);
+    return;
+  }
+
   const { cameraX, cameraY, player, enemy, elapsed } = state;
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   drawBackdrop(ctx, width, height, cameraX, elapsed);

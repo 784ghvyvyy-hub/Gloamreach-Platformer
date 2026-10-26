@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
+  advanceVillageDialogue,
   createGameState,
   startGame,
   resetGame,
@@ -14,6 +15,24 @@ import {
 import { drawPaintedWorld } from './paint';
 
 type Controls = { left: boolean; right: boolean; jump: boolean };
+const VILLAGE_DIALOGUE = [
+  { speaker: 'Ева', initial: 'Е', text: 'Лиза, ты обещала показать мне тайную тропинку!' },
+  { speaker: 'Лиза', initial: 'Л', text: 'Помню. Только далеко не уходи, хорошо?' },
+  { speaker: 'Ева', initial: 'Е', text: 'Обещаю!' },
+] as const;
+
+function makeHud(state: GameState) {
+  return {
+    phase: state.phase,
+    hp: state.player.hp,
+    maxHp: state.player.maxHp,
+    enemyHp: state.enemy.hp,
+    enemyMaxHp: state.enemy.maxHp,
+    location: state.location,
+    dialogueLine: state.dialogueLine,
+  };
+}
+
 const MUSHROOMS = [
   [84, 514, 1], [259, 509, .7], [375, 431, .8], [525, 515, .8],
   [654, 355, .75], [822, 512, 1.1], [942, 424, .7], [1118, 512, .9],
@@ -430,7 +449,7 @@ export default function GameCanvas() {
   const controlsRef = useRef<Controls>({ left: false, right: false, jump: false });
   const attackRef = useRef(false);
   const keySet = useRef(new Set<string>());
-  const [hud, setHud] = useState(() => ({ phase: stateRef.current.phase, hp: 5, maxHp: 5, enemyHp: 5, enemyMaxHp: 5 }));
+  const [hud, setHud] = useState(() => makeHud(stateRef.current));
   const [pressed, setPressed] = useState({ left: false, right: false, jump: false, attack: false });
 
   const releaseAll = useCallback(() => {
@@ -443,7 +462,7 @@ export default function GameCanvas() {
   const begin = useCallback(() => {
     if (stateRef.current.phase === 'ready') startGame(stateRef.current);
     else stateRef.current = resetGame();
-    setHud((h) => ({ ...h, phase: stateRef.current.phase, hp: stateRef.current.player.hp, enemyHp: stateRef.current.enemy.hp }));
+    setHud(makeHud(stateRef.current));
     releaseAll();
   }, [releaseAll]);
 
@@ -509,7 +528,7 @@ export default function GameCanvas() {
       drawPaintedWorld(ctx, state, width, height, scale);
       if (now - lastHud > 115) {
         lastHud = now;
-        setHud({ phase: state.phase, hp: state.player.hp, maxHp: state.player.maxHp, enemyHp: state.enemy.hp, enemyMaxHp: state.enemy.maxHp });
+        setHud(makeHud(state));
       }
       frame = requestAnimationFrame(tick);
     };
@@ -541,35 +560,44 @@ export default function GameCanvas() {
       onLostPointerCapture={touchEnd(control)}
     ><span>{text}</span></button>
   );
+  const continueDialogue = () => {
+    advanceVillageDialogue(stateRef.current);
+    setHud(makeHud(stateRef.current));
+  };
 
   const isIntro = hud.phase === 'ready';
   const isEnd = hud.phase === 'won' || hud.phase === 'fallen';
+  const activeDialogue = hud.dialogueLine >= 0
+    ? VILLAGE_DIALOGUE[hud.dialogueLine]
+    : undefined;
   return (
     <main className="game-shell">
       <div className="game-frame">
       <header className="game-topline">
           <div className="wordmark">
             <div className="sigil" aria-hidden="true">G</div>
-            <div><strong>Gloamreach</strong><span>A sanctuary beneath the world</span></div>
+             <div><strong>Gloamreach</strong><span>A village at the forest's edge</span></div>
           </div>
         <div className="top-actions">
-          <div className="top-note">A small tale in the deep</div>
+          <div className="top-note">A lantern-lit path into the dark</div>
           <button className="restart-button" type="button" onClick={begin} aria-label="Restart game" data-testid="button-restart-game">
             <span aria-hidden="true">↻</span> Restart
           </button>
         </div>
         </header>
         <section className="canvas-wrap" aria-label="Gloamreach game">
-          <canvas ref={canvasRef} className="game-canvas" aria-label="A heroine explores a ruined underground sanctuary" data-testid="game-canvas" />
+           <canvas ref={canvasRef} className="game-canvas" aria-label="Lisa explores a village at the edge of a dark forest" data-testid="game-canvas" />
           <div className="hud">
             <div className="hud-group" data-testid="status-player-health">
               <span className="hud-label">Resolve</span>
               <div className="health-row">{Array.from({ length: hud.maxHp }, (_, i) => <i key={i} className={`heart ${i >= hud.hp ? 'empty' : ''}`} />)}</div>
             </div>
-            <div className="hud-group" data-testid="status-creature-health">
-              <span className="enemy-title">{hud.enemyHp > 0 ? 'The Hollow Stalker' : 'Silence, at last'}</span>
-              <div className="enemy-meter"><i style={{ width: `${hud.enemyMaxHp ? Math.max(0, hud.enemyHp / hud.enemyMaxHp * 100) : 0}%` }} /></div>
-            </div>
+            {hud.location === 'sanctuary' ? (
+              <div className="hud-group" data-testid="status-creature-health">
+                <span className="enemy-title">{hud.enemyHp > 0 ? 'The Hollow Stalker' : 'Silence, at last'}</span>
+                <div className="enemy-meter"><i style={{ width: `${hud.enemyMaxHp ? Math.max(0, hud.enemyHp / hud.enemyMaxHp * 100) : 0}%` }} /></div>
+              </div>
+            ) : <div className="location-title">At the forest's edge</div>}
           </div>
           {isEnd && (
             <div className="overlay" data-testid="game-result">
@@ -584,12 +612,37 @@ export default function GameCanvas() {
           {isIntro && (
             <div className="overlay" data-testid="intro-overlay">
               <div className="overlay-card">
-                <div className="eyebrow">Beneath the forgotten nave</div>
-                <h1>Gloamreach</h1>
-                <p>Something stirs among the old stones. Keep your distance, find your footing, and strike when the Hollow Stalker draws near.</p>
-                <button className="primary-action" data-testid="button-begin" onClick={begin}>Enter the sanctuary</button>
+                <div className="eyebrow">The lantern village</div>
+                <h1>At the Forest’s Edge</h1>
+                <p>Find Eva beside the old well. Beyond the last lantern, a hidden path leads into the forest.</p>
+                <button className="primary-action" data-testid="button-begin" onClick={begin}>Begin the journey</button>
                 <div className="key-hint"><span><b>A / D</b> walk</span><span><b>Space</b> leap</span><span><b>X</b> strike</span></div>
               </div>
+            </div>
+          )}
+          {activeDialogue && (
+            <div className="dialogue-dock" data-testid="eva-dialogue">
+              <section
+                className="dialogue-card"
+                role="dialog"
+                aria-live="polite"
+                aria-label={`${activeDialogue.speaker} говорит`}
+              >
+                <div className="dialogue-sigil" aria-hidden="true">{activeDialogue.initial}</div>
+                <div className="dialogue-copy">
+                  <span className="dialogue-speaker">{activeDialogue.speaker}</span>
+                  <p>{activeDialogue.text}</p>
+                </div>
+                <button
+                  className="dialogue-continue"
+                  type="button"
+                  onClick={continueDialogue}
+                  data-testid="button-continue-dialogue"
+                >
+                  <span>{hud.dialogueLine === VILLAGE_DIALOGUE.length - 1 ? 'Продолжить путь' : 'Продолжить'}</span>
+                  <span className="dialogue-arrow" aria-hidden="true">›</span>
+                </button>
+              </section>
             </div>
           )}
           <div className="mobile-controls" aria-label="Touch controls">
@@ -604,7 +657,7 @@ export default function GameCanvas() {
           </div>
         </section>
         <footer className="game-footer">
-          <span>Find the rhythm. Wait for the opening.</span>
+          <span>Follow the lanterns. Find the hidden path.</span>
           <div className="footer-controls"><span>← → &nbsp; move</span><span>SPACE &nbsp; jump</span><span>X &nbsp; strike</span></div>
         </footer>
       </div>
