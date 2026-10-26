@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Gloamreach"
+description = "A playable dark fantasy platformer for desktop and iPhone browsers, with original Canvas-drawn characters and scenery, touch controls, responsive play, and a simple enemy encounter."
+version = "1.0.0"
+id = "artifacts/gloamreach"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19190
+
+[services.development]
+run = "pnpm --filter @workspace/gloamreach run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gloamreach", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/gloamreach/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19190"
+BASE_PATH = "/"
