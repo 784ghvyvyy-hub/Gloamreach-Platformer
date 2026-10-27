@@ -16,9 +16,9 @@ import { drawPaintedWorld } from './paint';
 
 type Controls = { left: boolean; right: boolean; jump: boolean };
 const VILLAGE_DIALOGUE = [
-  { speaker: 'Ева', initial: 'Е', text: 'Лиза, ты обещала показать мне тайную тропинку!' },
-  { speaker: 'Лиза', initial: 'Л', text: 'Помню. Только далеко не уходи, хорошо?' },
-  { speaker: 'Ева', initial: 'Е', text: 'Обещаю!' },
+  { speaker: 'Ева', portrait: '/eva-portrait.png', text: 'Лиза, ты обещала показать мне тайную тропинку!' },
+  { speaker: 'Лиза', portrait: '/liza-portrait.png', text: 'Помню. Только далеко не уходи, хорошо?' },
+  { speaker: 'Ева', portrait: '/eva-portrait.png', text: 'Обещаю!' },
 ] as const;
 
 function makeHud(state: GameState) {
@@ -628,7 +628,9 @@ export default function GameCanvas() {
                 aria-live="polite"
                 aria-label={`${activeDialogue.speaker} говорит`}
               >
-                <div className="dialogue-sigil" aria-hidden="true">{activeDialogue.initial}</div>
+                <div className="dialogue-sigil" aria-hidden="true">
+                  <img src={activeDialogue.portrait} alt="" />
+                </div>
                 <div className="dialogue-copy">
                   <span className="dialogue-speaker">{activeDialogue.speaker}</span>
                   <p>{activeDialogue.text}</p>
