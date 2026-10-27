@@ -80,10 +80,10 @@ const VILLAGE_PLATFORMS: Platform[] = [
   { x: 0, y: FLOOR_Y, width: VILLAGE_WIDTH, height: WORLD_HEIGHT - FLOOR_Y },
 ];
 
-const GRAVITY = 1480;
+const GRAVITY = 1400;
 const RUN_SPEED = 218;
 const RUN_ACCELERATION = 1540;
-const JUMP_SPEED = 535;
+const JUMP_SPEED = 700;
 
 export function createGameState(phase: GamePhase = "ready"): GameState {
   return {
